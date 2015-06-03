@@ -73,18 +73,16 @@ function doVisualisation(urlStr) {
 
   var url = parseUrl(urlStr);
 
-  initDB(url.dbUrl).then(function(db) {
-    return visualizeRevTree(db, url.doc).then(function(box) {
-      var svg = box.getElementsByTagName('svg')[0];
-      svg.style.width = svg.getAttribute('viewBox').split(' ')[2] * 7 + 'px';
-      svg.style.height = svg.getAttribute('viewBox').split(' ')[3] * 7 + 'px';
+  return visualizeRevTree(url.dbUrl, url.doc ,getTree).then(function(box) {
+    var svg = box.getElementsByTagName('svg')[0];
+    svg.style.width = svg.getAttribute('viewBox').split(' ')[2] * 7 + 'px';
+    svg.style.height = svg.getAttribute('viewBox').split(' ')[3] * 7 + 'px';
 
-      placeholder.appendChild(box);
-      info.innerHTML = '';
-      exportWrapper.style.display = 'block';
-      submit.removeAttribute('disabled');
-    });
-  }, error);
+    placeholder.appendChild(box);
+    info.innerHTML = '';
+    exportWrapper.style.display = 'block';
+    submit.removeAttribute('disabled');
+  });
 }
 
 function exportDoc() {
@@ -123,3 +121,34 @@ if (args.url) {
   document.getElementById('url').value = url;
   doVisualisation(url);
 }
+
+function getTree (dbUrl, docId) {
+  return initDB(dbUrl).then(function(db){
+    return db.get(docId).catch(function (err) {
+      if (err.reason !== "deleted") {
+        throw err;
+      }
+    }).then(function(doc){ // get winning revision here
+      var winner = doc._rev;
+      return db.get(docId, {revs: true, open_revs: "all"}).then(function(results){
+        console.log(db);
+        var deleted = {};
+        var paths = results.map(function(res) {
+          res = res.ok; // TODO: what about missing
+          if (res._deleted) {
+            deleted[res._rev] = true;
+          }
+          var revs = res._revisions;
+          return revs.ids.map(function(id, i) {
+            return (revs.start-i) + '-' + id;
+          });
+        });
+        return {
+          paths: paths,
+          deleted: deleted,
+          winner: winner
+        };
+      });
+    });    
+  });
+};
